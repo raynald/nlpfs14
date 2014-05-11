@@ -8,6 +8,9 @@ import heapq
 
 
 class StanfordParser(BaseEstimator, TransformerMixin):
+    ''' Parse documents and models using StanfordCoreNLP. Parsed sentences of
+        the article are stored in doc.ext['article'] and parsed models in
+        doc.ext['models'].'''
 
     def __init__(self):
         pass
@@ -41,6 +44,12 @@ class StanfordParser(BaseEstimator, TransformerMixin):
 
 
 class SentenceCompressor(BaseEstimator, TransformerMixin):
+    ''' A Viterbi-style algorithm to compress sentences. Basically, it learns
+        from a headline corpus the syntax of headlinese in terms of unigrams
+        and bigrams and also the unigram syntax of English from an article
+        corpus. It then tries to eliminate words in an English sentence
+        (keeping the order) to make it match the syntax of headlinese.
+    '''
 
     def __init__(self, max_n_words=25, tags_importance=0.7):
         self.max_n_words = max_n_words
@@ -144,6 +153,8 @@ class SentenceCompressor(BaseEstimator, TransformerMixin):
         return self
 
     def normalizeDict_(self, d):
+        ''' Normalizes the counts using Good-Turing 'intuition' for counting
+            zeros.'''
         n_once = sum([1 if v==1 else 0 for v in d.values()])
         t = sum(d.values())
         unknown_probability = n_once/float(t)
@@ -244,7 +255,12 @@ class SentenceCompressor(BaseEstimator, TransformerMixin):
                               sequence[position][0])
 
     def transform(self, documents):
-        '''Infer the best sentence for all lengths up to max_n_words.'''
+        ''' Infer the best sentence for all lengths up to max_n_words.
+            The result is stored in doc.ext['compressed_sentences'] as a list
+            of tuples where the first element is the sentence and the second
+            the log-probability of the sentence. Tuple #i is the best i+1-words
+            compression.
+        '''
         for doc in documents:
             doc.ext['compressed_sentences'] = []
             for sentence in doc.ext['article']:
@@ -318,7 +334,6 @@ class SentenceSelector(BaseEstimator):
         output = []
         for doc in documents:
             q = [(-s[1], s[0]) for s in doc.ext['compressed_sentences'][0]]
-            # stupid me...
             heapq.heapify(q)
             top = heapq.heappop(q)
             while (len(q) > 0 and (not top[1] is None) and

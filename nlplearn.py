@@ -34,7 +34,7 @@ class SimpleTextCleaner(BaseEstimator,TransformerMixin):
     #TODO: make better
     def __init__(self):
         pass
-    
+
     def fit(self,documents,y=None):
         return self
 
@@ -48,7 +48,7 @@ class SentenceSplitter(BaseEstimator,TransformerMixin):
     #TODO: make better
     def __init__(self):
         pass
-    
+
     def fit(self,documents,y=None):
         return self
 

@@ -1,6 +1,10 @@
 import xml.etree.ElementTree as ET
-import re,glob,random,os
+import re,glob,random,os, logging
 from corenlp import StanfordCoreNLP
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
 
 class Document(object):
     def __init__(self,name,path,modelPath,peerPath):
@@ -38,11 +42,14 @@ def parseSimpleFile(fileName):
 def loadDocuments(fileNames,modelPath,peerPath):
     documents = []
     for fileName in fileNames:
-        lis = fileName.rfind('/') + 1
-        path,name = '',fileName
-        if lis > 0:
-            path,name = fileName[:lis],fileName[lis:]
-        documents.append(Document(name,path,modelPath,peerPath))
+        try:
+            lis = fileName.rfind('/') + 1
+            path,name = '',fileName
+            if lis > 0:
+                path,name = fileName[:lis],fileName[lis:]
+            documents.append(Document(name,path,modelPath,peerPath))
+        except Exception, _:
+            logging.error("Impossible to parse file %s" % fileName)
     return documents
 
 def loadDocumentsFromFile(fileName,modelPath='data/duc2004/eval/models/1/',peerPath='data/duc2004/eval/peers/1/'):
@@ -124,12 +131,12 @@ def evaluateRouge(documents,predictions,rougeBinary='rouge/ROUGE-1.5.5.pl',rouge
         for fn in glob.glob('%s/*' % tmpPredFolderName):
             os.remove(fn)
         os.rmdir(tmpPredFolderName)
-    
+
     return results
 
 stanford = None
 
-def stanfordParse(text, corenlpDir='stanford-corenlp-full-2013-11-12/'):
+def stanfordParse(text, corenlpDir='corenlp/stanford-corenlp-full-2013-11-12/'):
     global stanford
     if stanford is None:
         stanford = StanfordCoreNLP(corenlpDir)

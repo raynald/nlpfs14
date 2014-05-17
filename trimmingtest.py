@@ -22,16 +22,21 @@ if __name__ == '__main__':
 
     pipeline = Pipeline([
         ('clean', SimpleTextCleaner()),
-        ('sentence', SentenceSplitter()),
         ('parse', StanfordParser()),
         ('compress', sc),
         ('select', SentenceSelector()),
         ])
 
-    parameters = {
-        'compress__tags_importance':
-        [i/10.0 for i in xrange(1,10)],
-    }
+    pipeline2 = Pipeline([
+        ('clean', SimpleTextCleaner()),
+        ('parse', StanfordParser()),
+        ('trim', ManualTrimmer()),
+        ])
+
+    # parameters = {
+    #     'compress__tags_importance':
+    #     [i/10.0 for i in xrange(1,10)],
+    # }
 
     # scorer = RougeScorer()
 
@@ -50,7 +55,7 @@ if __name__ == '__main__':
     #     print point
     #     print "Iteration %i/%i" % (i+1, len(gridpoints))
 
-    print pipeline.predict(documents)
+    scorer = RougeScorer()
 
-    for s in documents[0].ext['compressed_sentences'][0]:
-        print s
+    print "SentenceCompressor: %f" % scorer(pipeline, documents)
+    print "ManualTrimmer: %f" % scorer(pipeline2, documents)

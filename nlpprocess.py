@@ -7,7 +7,7 @@ class LanguageParser(BaseEstimator, TransformerMixin):
 
     '''Parse the sentences (tokenizing, tagging, chunk parsing)'''
 
-    def __init(self):
+    def __init__(self):
         pass
 
     def fit(self, documents, y=None):

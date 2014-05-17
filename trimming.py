@@ -1,10 +1,14 @@
 from sklearn.base import BaseEstimator
 from sklearn.base import TransformerMixin
 from nlpio import stanfordParse
+from parsetree import ParseTree
 from math import log
 import numpy as np
 import logging
 import heapq
+import timetagging
+import re
+import copy
 
 
 class StanfordParser(BaseEstimator, TransformerMixin):
@@ -24,10 +28,9 @@ class StanfordParser(BaseEstimator, TransformerMixin):
             processed = False
             if not 'article' in doc.ext.keys():
                 processed = True
-                doc.ext['article'] = []
-                for sentence in doc.ext['sentences']:
-                    doc.ext['article'].extend(
-                        stanfordParse(sentence)['sentences'])
+                stanfordOutput = stanfordParse(doc.text)
+                doc.ext['article'] = stanfordOutput['sentences']
+                doc.ext['coref'] = stanfordOutput['coref']
             if not 'models' in doc.ext.keys():
                 processed = True
                 doc.ext['models'] = []
@@ -43,7 +46,7 @@ class StanfordParser(BaseEstimator, TransformerMixin):
         return documents
 
 
-class SentenceCompressor(BaseEstimator, TransformerMixin):
+class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
     ''' A Viterbi-style algorithm to compress sentences. Basically, it learns
         from a headline corpus the syntax of headlinese in terms of unigrams
         and bigrams and also the unigram syntax of English from an article
@@ -61,7 +64,6 @@ class SentenceCompressor(BaseEstimator, TransformerMixin):
         self.headlinese_tags_unary = dict()  # unary
         self.english = dict()  # unary
         self.english_tags = dict()  # unary
-
         self.markers = {
             'begin': '$B$',
             'end': '$E$',
@@ -323,7 +325,7 @@ class SentenceCompressor(BaseEstimator, TransformerMixin):
 
 class SentenceSelector(BaseEstimator):
     '''Selects the best compression of the first sentence inferior in length
-    to max_length.'''
+    to max_length, after ViterbiSentenceCompressor.'''
     def __init__(self, max_length=75):
         self.max_length = max_length
 
@@ -344,3 +346,186 @@ class SentenceSelector(BaseEstimator):
             else:
                 output.append(top[1])
         return output
+
+
+re_det = re.compile("^(a|an|the)$", re.IGNORECASE)
+
+
+class ManualTrimmer(BaseEstimator, TransformerMixin):
+    ''' A sentence compressor that iteratively trims a sentence using a set
+        of manually defined rules.
+    '''
+
+    def __init__(self, max_length=75):
+        self.max_length = max_length
+
+    def fit(self, documents, y=None):
+        return self
+
+    def predict(self, documents):
+        documents = self.transform(documents)
+        output = []
+        for doc in documents:
+            output.append(doc.ext['trimmed_sentences'][0])
+        return output
+
+    def findSNode_(self, tree, level):
+        ''' Find the lowest, leftmost S node with NP and VP in the sentence.'''
+        s_node = (None, -1)
+        if tree.isTerminal:
+            return s_node
+        isThereNP = False
+        isThereVP = False
+        for child in tree.children:
+            child_s_node = self.findSNode_(child, level+1)
+            if child_s_node[1] > s_node[1]:
+                s_node = child_s_node
+            if child.tag == 'NP':
+                isThereNP = True
+            if child.tag == 'VP':
+                isThereVP = True
+        if tree.tag == 'S' and s_node[1] == -1 and isThereVP and isThereNP:
+            s_node = (tree, level)
+        return s_node
+
+    def removeSimpleDets_(self, tree):
+        kept_children = []
+        for child in tree.children:
+            if child.isTerminal:
+                if re_det.search(child.tag) is None:
+                    kept_children.append(child)
+            else:
+                if child == None:
+                    continue
+                child = self.removeSimpleDets_(child)
+                if len(child.children) > 0:
+                    kept_children.append(child)
+        tree.children = kept_children
+        return tree
+
+    def markTimeExpressionsRec_(self, tree, tag_list, index):
+        tree.info['timex'] = False
+        n_marked_children = 0
+        for child in tree.children:
+            child, index = self.markTimeExpressionsRec_(child, tag_list,
+                                                        index)
+            if child.info['timex']:
+                n_marked_children += 1
+                if ((tree.tag == 'NP' or tree.tag == 'PP')
+                        and child.tag != 'PP'):
+                    tree.info['timex'] = True
+        if len(tree.children) > 0 and n_marked_children == len(tree.children):
+            tree.info['timex'] = True
+        if tree.isTerminal:
+            index += 1
+            if tag_list[index]:
+                tree.info['timex'] = True
+        return tree, index
+
+    def removeTimeExpressionRec_(self, tree):
+        kept_children = []
+        for child in tree.children:
+            if not child.info['timex']:
+                child = self.removeTimeExpressionRec_(child)
+                kept_children.append(child)
+        tree.children = kept_children
+        return tree
+
+    def removeTimeExpressions_(self, tree):
+        ''' Remove constructions of the form [PP [NP [X ...] ...] ...] and
+            [NP [X ...] ...] where X is marked as time expression.'''
+        word_list = tree.outputWordList()
+        tag_list = timetagging.tag(word_list)
+
+        tree, _ = self.markTimeExpressionsRec_(tree, tag_list, -1)
+        tree = self.removeTimeExpressionRec_(tree)
+
+        return tree
+
+    def XPOverXP_(self, tree):
+        ''' Remove LIST from the lower rightmost structure of the form
+            [XP [XP ...] LIST].'''
+        if tree.isTerminal:
+            return tree, False
+        new_children = []
+        change = False
+        for child in reversed(tree.children):
+            if not change:
+                child, change = self.XPOverXP_(child)
+            new_children.append(child)
+        tree.children = list(reversed(new_children))
+        if change:
+            return tree, True
+        if ((tree.tag == 'NP' or tree.tag == 'VP' or tree.tag == 'S') and
+                tree.children[0].tag == tree.tag):
+            return tree.children[0], True
+        else:
+            return tree, False
+
+    def removeTag_(self, tree, tag):
+        ''' Remove lower rightmost tag.'''
+        if tree.isTerminal:
+            return tree, False
+        new_children = []
+        change = False
+        for child in reversed(tree.children):
+            if not change:
+                child, change = self.removeTag_(child, tag)
+            new_children.append(child)
+        tree.children = list(reversed(new_children))
+        if change:
+            return tree, True
+        if tree.children[-1].tag == tag:
+            tree.children = tree.children[:-1]
+            return tree, True
+        else:
+            return tree, False
+
+    def transform(self, documents):
+        for doc in documents:
+            doc.ext['trimmed_sentences'] = []
+            for sentence in doc.ext['article']:
+
+                tree = ParseTree()
+                tree.fromString(sentence['parsetree'])
+
+                # Selection of the S node (lowest leftmost node with NP VP)
+                candidate = self.findSNode_(tree, 0)[0]
+                if not candidate is None:
+                    tree = candidate
+
+                # Removal of a, an, the
+                tree = self.removeSimpleDets_(tree)
+
+                # Removal of time expressions
+                tree = self.removeTimeExpressions_(tree)
+
+                # XP-over-XP rule
+                change = True
+                while change and tree.computeLength() > self.max_length:
+                    tree, change = self.XPOverXP_(tree)
+
+                backup_tree = copy.deepcopy(tree)
+
+                # Removal of trailing PPs
+                change = True
+                while change and tree.computeLength() > self.max_length:
+                    tree, change = self.removeTag_(tree, 'PP')
+
+                # Conservative measure
+                if tree.computeLength() > self.max_length:
+                    tree = backup_tree
+
+                # Removal of trailing SBARs
+                change = True
+                while change and tree.computeLength() > self.max_length:
+                    tree, change = self.removeTag_(tree, 'SBAR')
+
+                # Removal of trailing PPs
+                change = True
+                while change and tree.computeLength() > self.max_length:
+                    tree, change = self.removeTag_(tree, 'PP')
+
+                doc.ext['trimmed_sentences'].append(" ".join(
+                    tree.outputWordList()))
+        return documents

@@ -12,6 +12,7 @@ import copy
 
 
 class StanfordParser(BaseEstimator, TransformerMixin):
+
     ''' Parse documents and models using StanfordCoreNLP. Parsed sentences of
         the article are stored in doc.ext['article'] and parsed models in
         doc.ext['models'].'''
@@ -28,9 +29,14 @@ class StanfordParser(BaseEstimator, TransformerMixin):
             processed = False
             if not 'article' in doc.ext.keys():
                 processed = True
-                stanfordOutput = stanfordParse(doc.text)
-                doc.ext['article'] = stanfordOutput['sentences']
-                doc.ext['coref'] = stanfordOutput['coref']
+                doc.ext['article'] = []
+                for sentence in doc.ext['sentences']:
+                    doc.ext['article'].extend(
+                        stanfordParse(sentence)['sentences'])
+                # What I'd like to do, but damn slow:
+                # stanfordOutput = stanfordParse(doc.text)
+                # doc.ext['article'] = stanfordOutput['sentences']
+                # doc.ext['coref'] = stanfordOutput['coref']
             if not 'models' in doc.ext.keys():
                 processed = True
                 doc.ext['models'] = []
@@ -38,15 +44,16 @@ class StanfordParser(BaseEstimator, TransformerMixin):
                     doc.ext['models'].extend(
                         stanfordParse(model)['sentences'])
             if processed:
-                logging.info("Processed document %i/%i" % (i+1,
+                logging.info("Processed document %i/%i" % (i + 1,
                                                            len(documents)))
             else:
                 logging.info("Document %i/%i was already processed" %
-                             (i+1, len(documents)))
+                             (i + 1, len(documents)))
         return documents
 
 
 class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
+
     ''' A Viterbi-style algorithm to compress sentences. Basically, it learns
         from a headline corpus the syntax of headlinese in terms of unigrams
         and bigrams and also the unigram syntax of English from an article
@@ -148,7 +155,7 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
                         self.english_tags[tag] = 1
                     else:
                         self.english_tags[tag] += 1
-            logging.info("Processed document %i/%i" % (i+1, len(documents)))
+            logging.info("Processed document %i/%i" % (i + 1, len(documents)))
         # Normalizing the probabilities
         logging.info("Normalizing probabilities...")
         self.normalize_()
@@ -157,9 +164,9 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
     def normalizeDict_(self, d):
         ''' Normalizes the counts using Good-Turing 'intuition' for counting
             zeros.'''
-        n_once = sum([1 if v==1 else 0 for v in d.values()])
+        n_once = sum([1 if v == 1 else 0 for v in d.values()])
         t = sum(d.values())
-        unknown_probability = n_once/float(t)
+        unknown_probability = n_once / float(t)
         if unknown_probability == 1.0:
             unknown_probability = 0.99
         elif unknown_probability == 0.0:
@@ -244,15 +251,15 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
         else:
             probability_tags += log(self.headlinese_tags[last_tag][next_tag])
 
-        return (self.tags_importance*probability_tags +
-                (1-self.tags_importance)*probability_words)
+        return (self.tags_importance * probability_tags +
+                (1 - self.tags_importance) * probability_words)
 
     def backtrace_(self, sequence, backtrace, index, position):
         ''' Backtrace the sentence obtained in the Viterbi algorithm.'''
         if backtrace[position][index] == -1:
             return sequence[position][0]
         else:
-            return "%s %s" % (self.backtrace_(sequence, backtrace, index-1,
+            return "%s %s" % (self.backtrace_(sequence, backtrace, index - 1,
                                               backtrace[position][index]),
                               sequence[position][0])
 
@@ -267,12 +274,12 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
             doc.ext['compressed_sentences'] = []
             for sentence in doc.ext['article']:
                 doc.ext['compressed_sentences'].append([])
-                backtrace = -1*np.ones((len(sentence['words']),
-                                        self.max_n_words),
-                                       dtype=int)
-                probability = -np.Infinity*np.ones((len(sentence['words']),
-                                                    self.max_n_words),
-                                                   dtype=float)
+                backtrace = -1 * np.ones((len(sentence['words']),
+                                          self.max_n_words),
+                                         dtype=int)
+                probability = -np.Infinity * np.ones((len(sentence['words']),
+                                                      self.max_n_words),
+                                                     dtype=float)
                 # Initialization
                 start_marker = self.createWord_(self.markers['begin'],
                                                 self.markers['begin'])
@@ -284,15 +291,15 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
                 for index in xrange(1, self.max_n_words):
                     for next_position in xrange(len(sentence['words'])):
                         for last_position in xrange(next_position):
-                            if (probability[last_position][index-1] ==
+                            if (probability[last_position][index - 1] ==
                                     -np.Infinity):
                                 continue
-                            prob = (probability[last_position][index-1] +
+                            prob = (probability[last_position][index - 1] +
                                     self.jointProbability_(
                                         sentence['words'],
                                         sentence['words'][last_position],
                                         sentence['words'][next_position],
-                                        last_position+1, next_position))
+                                        last_position + 1, next_position))
                             if prob > probability[next_position][index]:
                                 backtrace[next_position][index] = last_position
                                 probability[next_position][index] = prob
@@ -304,15 +311,16 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
                     best_position = -1
                     for position in xrange(len(sentence['words'])):
                         prob = (probability[position][index] +
-                            self.jointProbability_(sentence['words'],
-                                sentence['words'][position], end_marker,
-                                position+1, len(sentence['words'])))
+                                self.jointProbability_(sentence['words'],
+                                                       sentence['words'][
+                                                           position], end_marker,
+                                                       position + 1, len(sentence['words'])))
                         if prob > best_score:
                             best_score = prob
                             best_position = position
                     if best_score == -np.Infinity:
                         doc.ext['compressed_sentences'][-1].append((None,
-                                                            best_score))
+                                                                    best_score))
                     else:
                         doc.ext['compressed_sentences'][-1].append((
                             self.backtrace_(sentence['words'], backtrace,
@@ -324,8 +332,10 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
 
 
 class SentenceSelector(BaseEstimator):
+
     '''Selects the best compression of the first sentence inferior in length
     to max_length, after ViterbiSentenceCompressor.'''
+
     def __init__(self, max_length=75):
         self.max_length = max_length
 
@@ -352,6 +362,7 @@ re_det = re.compile("^(a|an|the)$", re.IGNORECASE)
 
 
 class ManualTrimmer(BaseEstimator, TransformerMixin):
+
     ''' A sentence compressor that iteratively trims a sentence using a set
         of manually defined rules.
     '''
@@ -377,7 +388,7 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
         isThereNP = False
         isThereVP = False
         for child in tree.children:
-            child_s_node = self.findSNode_(child, level+1)
+            child_s_node = self.findSNode_(child, level + 1)
             if child_s_node[1] > s_node[1]:
                 s_node = child_s_node
             if child.tag == 'NP':
@@ -386,6 +397,19 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
                 isThereVP = True
         if tree.tag == 'S' and s_node[1] == -1 and isThereVP and isThereNP:
             s_node = (tree, level)
+        return s_node
+
+    def selectWholeSentence_(self, tree, level):
+        ''' Selects the first S node it encounters.'''
+        s_node = (None, 100000)
+        if tree.isTerminal:
+            return s_node
+        if tree.tag == 'S':
+            return (tree, level)
+        for child in tree.children:
+            child_s_node = self.selectWholeSentence_(child, level + 1)
+            if child_s_node[1] < s_node[1]:
+                s_node = child_s_node
         return s_node
 
     def removeSimpleDets_(self, tree):
@@ -475,6 +499,8 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
         tree.children = list(reversed(new_children))
         if change:
             return tree, True
+        if len(tree.children) == 0:
+            return tree, False
         if tree.children[-1].tag == tag:
             tree.children = tree.children[:-1]
             return tree, True
@@ -490,7 +516,7 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
                 tree.fromString(sentence['parsetree'])
 
                 # Selection of the S node (lowest leftmost node with NP VP)
-                candidate = self.findSNode_(tree, 0)[0]
+                candidate = self.selectWholeSentence_(tree, 0)[0]
                 if not candidate is None:
                     tree = candidate
 

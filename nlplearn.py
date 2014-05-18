@@ -3,6 +3,7 @@ from nlpio import *
 import numpy as np
 import logging
 import random
+import nltk.data
 
 from sklearn.base import BaseEstimator,TransformerMixin
 
@@ -44,10 +45,14 @@ class SimpleTextCleaner(BaseEstimator,TransformerMixin):
             doc.text = re.sub("(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\.","\\1",doc.text)
         return documents
 
+trained_splitter = None
+
 class SentenceSplitter(BaseEstimator,TransformerMixin):
     #TODO: make better
     def __init__(self):
-        pass
+        global trained_splitter
+        if trained_splitter is None:
+            trained_splitter = nltk.data.load('tokenizers/punkt/english.pickle')
 
     def fit(self,documents,y=None):
         return self
@@ -55,6 +60,6 @@ class SentenceSplitter(BaseEstimator,TransformerMixin):
     def transform(self,documents):
         for doc in documents:
             if not 'sentences' in doc.ext:
-                doc.ext['sentences'] = [s.strip() for s in doc.text.split('.') if s]
+                doc.ext['sentences'] = trained_splitter.tokenize(doc.text.strip())
         return documents
 

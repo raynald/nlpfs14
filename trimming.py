@@ -61,7 +61,8 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
         (keeping the order) to make it match the syntax of headlinese.
     '''
 
-    def __init__(self, max_n_words=25, tags_importance=0.7):
+    def __init__(self, max_n_words=25, tags_importance=0.7, max_n_sentences=1):
+        self.max_n_sentences = max_n_sentences
         self.max_n_words = max_n_words
         self.tags_importance = tags_importance
 
@@ -272,7 +273,8 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
         '''
         for doc in documents:
             doc.ext['compressed_sentences'] = []
-            for sentence in doc.ext['article']:
+            for sentence in [doc.ext['article'][i] for i in
+            xrange(min(self.max_n_sentences, len(doc.ext['article'])))]:
                 doc.ext['compressed_sentences'].append([])
                 backtrace = -1 * np.ones((len(sentence['words']),
                                           self.max_n_words),
@@ -367,7 +369,8 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
         of manually defined rules.
     '''
 
-    def __init__(self, max_length=75):
+    def __init__(self, max_length=75, max_n_sentences=1):
+        self.max_n_sentences = max_n_sentences
         self.max_length = max_length
 
     def fit(self, documents, y=None):
@@ -404,7 +407,14 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
         s_node = (None, 100000)
         if tree.isTerminal:
             return s_node
-        if tree.tag == 'S':
+        isThereNP = False
+        isThereVP = False
+        for child in tree.children:
+            if child.tag == 'NP':
+                isThereNP = True
+            if child.tag == 'VP':
+                isThereVP = True
+        if tree.tag == 'S' and isThereVP and isThereNP:
             return (tree, level)
         for child in tree.children:
             child_s_node = self.selectWholeSentence_(child, level + 1)
@@ -480,7 +490,7 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
         tree.children = list(reversed(new_children))
         if change:
             return tree, True
-        if ((tree.tag == 'NP' or tree.tag == 'VP' or tree.tag == 'S') and
+        if ((tree.tag == 'NP' or tree.tag == 'VP') and # 'S' could be added
                 tree.children[0].tag == tree.tag):
             return tree.children[0], True
         else:
@@ -510,12 +520,19 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
     def transform(self, documents):
         for doc in documents:
             doc.ext['trimmed_sentences'] = []
-            for sentence in doc.ext['article']:
+            for sentence in [doc.ext['article'][i] for i in
+            xrange(min(self.max_n_sentences, len(doc.ext['article'])))]:
 
                 tree = ParseTree()
                 tree.fromString(sentence['parsetree'])
 
-                # Selection of the S node (lowest leftmost node with NP VP)
+                # In case the sentence is short enough
+                if tree.computeLength() <= self.max_length:
+                    doc.ext['trimmed_sentences'].append(" ".join(
+                        tree.outputWordList()))
+                    continue
+
+                # Selection of the S node
                 candidate = self.selectWholeSentence_(tree, 0)[0]
                 if not candidate is None:
                     tree = candidate
@@ -532,6 +549,8 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
                     tree, change = self.XPOverXP_(tree)
 
                 backup_tree = copy.deepcopy(tree)
+
+                print tree.computeLength()
 
                 # Removal of trailing PPs
                 change = True

@@ -63,3 +63,13 @@ class SentenceSplitter(BaseEstimator,TransformerMixin):
                 doc.ext['sentences'] = trained_splitter.tokenize(doc.text.strip())
         return documents
 
+
+class PeerEstimator(BaseEstimator, TransformerMixin):
+    def __init__(self, peer=0):
+        self.peer = peer
+
+    def fit(self, documents, y=None):
+        return self
+
+    def predict(self, documents):
+        return [doc.peers[self.peer] for doc in documents]

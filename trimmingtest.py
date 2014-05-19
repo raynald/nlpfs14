@@ -1,6 +1,7 @@
 from nlpio import *
 from trimming import *
 from nlplearn import *
+from sentenceselection import *
 from sklearn.pipeline import Pipeline
 from sklearn.grid_search import ParameterGrid
 import pickle
@@ -24,7 +25,7 @@ if __name__ == '__main__':
         ('clean', SimpleTextCleaner()),
         ('parse', StanfordParser()),
         ('compress', sc),
-        ('select', SentenceSelector()),
+        ('select', FirstSentenceSelector()),
         ])
 
     pipeline2 = Pipeline([

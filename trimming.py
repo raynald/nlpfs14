@@ -8,6 +8,7 @@ import logging
 import timetagging
 import re
 import copy
+import heapq
 
 
 class StanfordParser(BaseEstimator, TransformerMixin):
@@ -60,10 +61,10 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
         (keeping the order) to make it match the syntax of headlinese.
     '''
 
-    def __init__(self, max_n_words=25, tags_importance=0.7, max_n_sentences=1):
-        self.max_n_sentences = max_n_sentences
+    def __init__(self, max_n_words=25, tags_importance=0.7, max_length=75):
         self.max_n_words = max_n_words
         self.tags_importance = tags_importance
+        self.max_length = max_length
 
         self.headlinese = dict()  # bigrams
         self.headlinese_tags = dict()  # bigrams
@@ -272,8 +273,7 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
         '''
         for doc in documents:
             doc.ext['compressed_sentences'] = []
-            for sentence in [doc.ext['article'][i] for i in
-            xrange(min(self.max_n_sentences, len(doc.ext['article'])))]:
+            for sentence in doc.ext['article']:
                 doc.ext['compressed_sentences'].append([])
                 backtrace = -1 * np.ones((len(sentence['words']),
                                           self.max_n_words),
@@ -329,7 +329,22 @@ class ViterbiSentenceCompressor(BaseEstimator, TransformerMixin):
         return documents
 
     def predict(self, documents):
-        return None
+        '''Output the best compression (inferior to max_length in length) for
+            the first sentence.'''
+        documents = self.transform(documents)
+        output = []
+        for doc in documents:
+            q = [(-s[1], s[0]) for s in doc.ext['compressed_sentences'][0]]
+            heapq.heapify(q)
+            top = heapq.heappop(q)
+            while (len(q) > 0 and (not top[1] is None) and
+                    len(top[1]) > self.max_length):
+                top = heapq.heappop(q)
+            if top[1] is None or len(top[1]) > self.max_length:
+                output.append('')
+            else:
+                output.append(top[1])
+        return output
 
 
 re_det = re.compile("^(a|an|the)$", re.IGNORECASE)
@@ -341,14 +356,14 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
         of manually defined rules.
     '''
 
-    def __init__(self, max_length=75, max_n_sentences=1):
-        self.max_n_sentences = max_n_sentences
+    def __init__(self, max_length=75):
         self.max_length = max_length
 
     def fit(self, documents, y=None):
         return self
 
     def predict(self, documents):
+        ''' Ouput the first sentence for each documents.'''
         documents = self.transform(documents)
         output = []
         for doc in documents:
@@ -492,8 +507,7 @@ class ManualTrimmer(BaseEstimator, TransformerMixin):
     def transform(self, documents):
         for doc in documents:
             doc.ext['trimmed_sentences'] = []
-            for sentence in [doc.ext['article'][i] for i in
-            xrange(min(self.max_n_sentences, len(doc.ext['article'])))]:
+            for sentence in doc.ext['article']:
 
                 tree = ParseTree()
                 tree.fromString(sentence['parsetree'])

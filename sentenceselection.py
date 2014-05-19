@@ -1,30 +1,30 @@
 from sklearn.base import BaseEstimator
 from sklearn.base import TransformerMixin
-import heapq
+import copy
 
 
-class FirstSentenceSelector(BaseEstimator):
+class FirstSentenceSelector(BaseEstimator, TransformerMixin):
 
-    '''Selects the best compression of the first sentence inferior in length
-    to max_length, after ViterbiSentenceCompressor.'''
+    '''Selects the first sentence of each article.'''
 
-    def __init__(self, max_length=75):
-        self.max_length = max_length
+    def __init__(self):
+        pass
 
     def fit(self, documents, y=None):
         return self
 
-    def predict(self, documents):
-        output = []
+    def transform(self, documents):
+        documents_copy = []
         for doc in documents:
-            q = [(-s[1], s[0]) for s in doc.ext['compressed_sentences'][0]]
-            heapq.heapify(q)
-            top = heapq.heappop(q)
-            while (len(q) > 0 and (not top[1] is None) and
-                    len(top[1]) > self.max_length):
-                top = heapq.heappop(q)
-            if top[1] is None or len(top[1]) > self.max_length:
-                output.append('')
-            else:
-                output.append(top[1])
+            copy_doc = copy.deepcopy(doc)
+            copy_doc.ext['sentences'] = [copy_doc.ext['sentences'][0]]
+            copy_doc.ext['article'] = [copy_doc.ext['article'][0]]
+            documents_copy.append(copy_doc)
+        return documents_copy
+
+    def predict(self, documents):
+        copy_documents = self.transform(documents)
+        output = []
+        for doc in copy_documents:
+            output.append(doc.ext['sentences'][0])
         return output

@@ -23,14 +23,17 @@ if __name__ == '__main__':
 
     pipeline = Pipeline([
         ('clean', SimpleTextCleaner()),
+        ('split', SentenceSplitter()),
         ('parse', StanfordParser()),
-        ('compress', sc),
         ('select', FirstSentenceSelector()),
+        ('compress', sc),
         ])
 
     pipeline2 = Pipeline([
         ('clean', SimpleTextCleaner()),
+        ('split', SentenceSplitter()),
         ('parse', StanfordParser()),
+        ('select', FirstSentenceSelector()),
         ('trim', ManualTrimmer()),
         ])
 

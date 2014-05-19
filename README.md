@@ -20,14 +20,19 @@ Only two functions are needed by a user, one being the ``loadDocumentsFromFile``
 
 The ```learntest.py``` file shows the usage of the nlplearn module.
 The modules contains transformers and estimators to set up an sklearn pipeline and do a parameter grid search through cross-validation.
+
+### Sentence selection
+
+This module aims at selecting the best sentence. So far it only contains a dumb sentence selector that reduces a document to its first sentence.
+
 ### Trimming
+
 The trimming module builds on the sentence cleaning and splitting tools implemented in the nlplearn module. It adds to the pipeline:
 * a transformer that processes documents using StanfordCoreNLP
 * a sentence compressor based on HMM Hedge (paper: http://www.sciencedirect.com/science/article/pii/S0306457307000295). The sentence compressor should ideally be trained on huge corpus of articles and headlines (but pairs of sentences and compressions are not needed). An instance trained on the data described in ```trainset.txt```is provided in ```trainedcompressor.py```.
-* a dumb sentence selector that outputs the best compression (within a length budget) of the first sentence of the document.
 * a transformer that trims the sentences according to a predefined set of rules (paper: http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.14.7749). For now it also selects the first sentence. It performs better than HMM Hedge.
 
-The file ```trimmingtest.py``` shows basic setup and usage of the module.
+The file ```trimmingtest.py``` shows basic setup and usage of the sentence selection and trimming modules.
 
 ### Workflow
 

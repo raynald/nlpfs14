@@ -21,6 +21,9 @@ if __name__ == '__main__':
     ls.addFeature(IsFirst())
     ls.addFeature(Length())
     ls.addFeature(WordCoverage(stop_words='english'))
+    ls.addFeature(PositionInDocument())
+    ls.addFeature(NamedEntityCount())
+    ls.addFeature(Constant())
 
     pipeline = Pipeline([
         ('clean', SimpleTextCleaner()),

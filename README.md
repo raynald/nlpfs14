@@ -25,7 +25,13 @@ The modules contains transformers and estimators to set up an sklearn pipeline a
 
 This module aims at selecting the best sentence. It contains:
 * a dumb transformer that selects the first sentence
-* an online learning linear regressor that tries to approximate the ROUGE score with a weighted sum of features. The features are easy to write as subclasses of a basic generic Feature class.
+* an online learning linear regressor that tries to approximate the ROUGE score with a weighted sum of features. The features are easy to write as subclasses of a basic generic Feature class. Some features:
+    - IsFirst
+    - Length
+    - WordCoverage
+    - PositionInDocument
+    - NamedEntityCount
+    - Constant
 
 ### Trimming
 

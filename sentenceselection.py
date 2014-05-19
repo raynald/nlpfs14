@@ -35,6 +35,7 @@ class FirstSentenceSelector(BaseEstimator, TransformerMixin):
 
 
 class Feature:
+    ''' Base class for features used by LinearSelector.'''
     def __init__(self):
         pass
 
@@ -46,13 +47,30 @@ class Feature:
 
 
 class IsFirst(Feature):
+    ''' 1 if first sentence, 0 otherwise.'''
     def evaluate(self, document):
         output = np.zeros((len(document.ext['article']),))
         output[0] = 1.0
         return output
 
 
+class PositionInDocument(Feature):
+    ''' Yields the normalized position in the document.'''
+    def evaluate(self, documents):
+        output = (np.array(range(len(documents.ext['article'])))
+                  / float(len(documents.ext['article'])))
+        return output
+
+
+class Constant(Feature):
+    ''' Constant feature.'''
+    def evaluate(self, document):
+        output = np.ones((len(document.ext['article']),))
+        return output
+
+
 class Length(Feature):
+    ''' The length of the sentence.'''
     def evaluate(self, document):
         output = []
         for sentence in document.ext['article']:
@@ -61,6 +79,8 @@ class Length(Feature):
 
 
 class WordCoverage(Feature):
+    ''' A estimation of the coverage of a sentence by summing the components of
+        its tfidf representation.'''
     def __init__(self, **kwargs):
         self.tfidf = TfidfVectorizer(**kwargs)
 
@@ -71,6 +91,24 @@ class WordCoverage(Feature):
                                        sentence['words']]))
         bow = self.tfidf.fit_transform(sentences)
         return bow.sum(axis=1)
+
+
+class NamedEntityCount(Feature):
+    ''' Counts the number of named entities per sentence.'''
+    def evaluate(self, document):
+        output = []
+        for sentence in document.ext['article']:
+            count = 0
+            last_was_entity = False
+            for word in sentence['words']:
+                if word[1]['NamedEntityTag'] != 'O':
+                    if not last_was_entity:
+                        count += 1
+                    last_was_entity = True
+                else:
+                    last_was_entity = False
+            output.append(float(count))
+        return np.array(output)
 
 
 class LinearSelector(BaseEstimator, TransformerMixin):
@@ -121,7 +159,7 @@ class LinearSelector(BaseEstimator, TransformerMixin):
 
     def fit(self, documents, y=None):
         ''' An online linear algorithm that tries to approximate the rouge
-            score with weights * features.
+            score as weights * features.
         '''
 
         self.covariance_matrix = self.regularizer*np.eye(len(self.features))

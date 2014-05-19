@@ -47,7 +47,7 @@ class Feature:
 
 class IsFirst(Feature):
     def evaluate(self, document):
-        output = np.zeros((len(document.ext['sentences']),))
+        output = np.zeros((len(document.ext['article']),))
         output[0] = 1.0
         return output
 
@@ -55,8 +55,8 @@ class IsFirst(Feature):
 class Length(Feature):
     def evaluate(self, document):
         output = []
-        for sentence in document.ext['sentences']:
-            output.append(float(len(sentence)))
+        for sentence in document.ext['article']:
+            output.append(float(len(sentence['text'])))
         return np.array(output)
 
 
@@ -102,10 +102,10 @@ class LinearSelector(BaseEstimator, TransformerMixin):
         documents_copy = []
         for doc in documents:
             copy_doc = copy.deepcopy(doc)
-            score = np.zeros((len(copy_doc.ext['sentences']), 1))
+            score = np.zeros((len(copy_doc.ext['article']), 1))
             for weight, feature in zip(self.weights.flatten(), self.features):
                 score += weight * np.reshape(feature.evaluate(copy_doc),
-                                           (len(copy_doc.ext['sentences']), 1))
+                                           (len(copy_doc.ext['article']), 1))
             best = np.argmax(score)
             copy_doc.ext['sentences'] = [copy_doc.ext['sentences'][best]]
             copy_doc.ext['article'] = [copy_doc.ext['article'][best]]
@@ -116,7 +116,7 @@ class LinearSelector(BaseEstimator, TransformerMixin):
         copy_documents = self.transform(documents)
         output = []
         for doc in copy_documents:
-            output.append(doc.ext['sentences'][0])
+            output.append(doc.ext['article'][0]['text'])
         return output
 
     def fit(self, documents, y=None):
@@ -151,14 +151,14 @@ class LinearSelector(BaseEstimator, TransformerMixin):
             self.weights = np.dot(self.inv_covariance_matrix, self.feedback)
 
         feature_values = np.zeros((len(self.features),
-                                   len(document.ext['sentences'])))
+                                   len(document.ext['article'])))
         for i, feature in enumerate(self.features):
             feature_values[i, :] = feature.evaluate(document).flatten()
 
         estimates = np.dot(feature_values.T, np.reshape(self.weights,
                            (len(self.weights), 1)))
-        estimates_variance = np.zeros((len(document.ext['sentences']), 1))
-        for j in xrange(len(document.ext['sentences'])):
+        estimates_variance = np.zeros((len(document.ext['article']), 1))
+        for j in xrange(len(document.ext['article'])):
             estimates_variance[j] = self.learning_rate * np.sqrt(
                 np.dot(np.dot(feature_values[:, j].T,
                        self.inv_covariance_matrix), feature_values[:, j]))
@@ -168,4 +168,4 @@ class LinearSelector(BaseEstimator, TransformerMixin):
                                                              suggested_index],
                                               (feature_values.shape[0], 1))
         logging.debug('Selected sentence %i', suggested_index)
-        return document.ext['sentences'][suggested_index]
+        return document.ext['article'][suggested_index]['text']

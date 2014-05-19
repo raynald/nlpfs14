@@ -1,6 +1,7 @@
 from nlpio import evaluateRouge
 from sklearn.base import BaseEstimator
 from sklearn.base import TransformerMixin
+from sklearn.feature_extraction.text import TfidfVectorizer
 import copy
 import numpy as np
 import logging
@@ -59,6 +60,19 @@ class Length(Feature):
         return np.array(output)
 
 
+class WordCoverage(Feature):
+    def __init__(self, **kwargs):
+        self.tfidf = TfidfVectorizer(**kwargs)
+
+    def evaluate(self, document):
+        sentences = []
+        for sentence in document.ext['article']:
+            sentences.append(" ".join([word[1]['Lemma'] for word in
+                                       sentence['words']]))
+        bow = self.tfidf.fit_transform(sentences)
+        return bow.sum(axis=1)
+
+
 class LinearSelector(BaseEstimator, TransformerMixin):
 
     '''Selects a sentence based on its score (weighted sum of features).'''
@@ -88,9 +102,10 @@ class LinearSelector(BaseEstimator, TransformerMixin):
         documents_copy = []
         for doc in documents:
             copy_doc = copy.deepcopy(doc)
-            score = np.zeros((len(copy_doc.ext['sentences']),))
-            for weight, feature in zip(self.weights, self.features):
-                score += weight * feature.evaluate(copy_doc)
+            score = np.zeros((len(copy_doc.ext['sentences']), 1))
+            for weight, feature in zip(self.weights.flatten(), self.features):
+                score += weight * np.reshape(feature.evaluate(copy_doc),
+                                           (len(copy_doc.ext['sentences']), 1))
             best = np.argmax(score)
             copy_doc.ext['sentences'] = [copy_doc.ext['sentences'][best]]
             copy_doc.ext['article'] = [copy_doc.ext['article'][best]]
@@ -138,7 +153,7 @@ class LinearSelector(BaseEstimator, TransformerMixin):
         feature_values = np.zeros((len(self.features),
                                    len(document.ext['sentences'])))
         for i, feature in enumerate(self.features):
-            feature_values[i, :] = feature.evaluate(document)
+            feature_values[i, :] = feature.evaluate(document).flatten()
 
         estimates = np.dot(feature_values.T, np.reshape(self.weights,
                            (len(self.weights), 1)))
@@ -152,4 +167,5 @@ class LinearSelector(BaseEstimator, TransformerMixin):
         self.last_feature_values = np.reshape(feature_values[:,
                                                              suggested_index],
                                               (feature_values.shape[0], 1))
+        logging.debug('Selected sentence %i', suggested_index)
         return document.ext['sentences'][suggested_index]

@@ -17,11 +17,16 @@ if __name__ == '__main__':
         # Brace yourself
         documents = loadDocumentsFromFile('.'.join([filename, 'txt']))
 
+    ls = LinearSelector()
+    ls.addFeature(IsFirst())
+    ls.addFeature(Length())
+    ls.addFeature(WordCoverage(stop_words='english'))
+
     pipeline = Pipeline([
         ('clean', SimpleTextCleaner()),
         ('split', SentenceSplitter()),
         ('parse', StanfordParser()),
-        ('select', LinearSelector()),
+        ('select', ls),
         ])
 
     pipeline.fit(documents)

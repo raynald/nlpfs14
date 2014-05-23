@@ -136,7 +136,7 @@ def evaluateRouge(documents,predictions,rougeBinary='rouge/ROUGE-1.5.5.pl',rouge
 
 stanford = None
 
-def stanfordParse(text, corenlpDir='corenlp/stanford-corenlp-full-2013-11-12/'):
+def stanfordParse(text, corenlpDir='corenlp/stanford-corenlp-full-2014-01-04'):
     global stanford
     if stanford is None:
         stanford = StanfordCoreNLP(corenlpDir)
